@@ -1,8 +1,12 @@
 package accesstoken
 
 import (
+	"crypto/rsa"
+	"io/ioutil"
 	"strings"
 	"time"
+
+	"github.com/dgrijalva/jwt-go"
 
 	"github.com/google/uuid"
 	"github.com/pt-abhishek/oAuth-api/src/utils/errors"
@@ -13,12 +17,24 @@ const (
 	grantTypeClientCreds = "client_credentials"
 )
 
+var (
+	privateKey *rsa.PrivateKey
+)
+
+func init() {
+	pkBytes, err := ioutil.ReadFile("repository/keys/app.rsa")
+	if err != nil {
+		panic(err)
+	}
+	privateKey, _ = jwt.ParseRSAPrivateKeyFromPEM(pkBytes)
+}
+
 //AccessToken is the actual access token
 type AccessToken struct {
 	AccessToken string `json:"access_token"`
 	ClientID    string `json:"client_id"`
 	Expires     int64  `json:"expires"`
-	JWT         string `json:"jwt"`
+	JWT         string `json:"bearer_token"`
 }
 
 //TokenRequest is the modified request
@@ -29,13 +45,23 @@ type TokenRequest struct {
 	//For grant type client_credentials
 	ClientID     string `json:"client_id"`
 	ClientSecret string `json:"client_secret"`
+
+	//User Info for when scope contains openIDConnect
+	UserID int64 `json:"user_id"`
+}
+
+//CustomClaims are the claims we send
+type CustomClaims struct {
+	Token        string `json:"access_token"`
+	IsAuthorized bool   `json:"is_authorized"`
+	UserID       int64  `json:"user_id"`
+	jwt.StandardClaims
 }
 
 //Repository is the DB
 type Repository interface {
 	GetByID(string) (*AccessToken, *errors.RestErr)
 	Create(*TokenRequest) (*AccessToken, *errors.RestErr)
-	// UpdateExpirationTime(AccessToken) *errors.RestErr
 }
 
 //GetNewAccessToken gets a new access token
@@ -47,30 +73,32 @@ func GetNewAccessToken(t *TokenRequest) *AccessToken {
 	}
 }
 
-//IsExpired checks if an access token is expired or not
-func (t *AccessToken) IsExpired() bool {
-	now := time.Now().UTC()
-	expirationTime := time.Unix(t.Expires, 0)
-	return expirationTime.Before(now)
+//AddJWTToken gets a new jwt token
+func (at *AccessToken) AddJWTToken(t *TokenRequest) *errors.RestErr {
+	claims := CustomClaims{
+		at.AccessToken,
+		true,
+		t.UserID,
+		jwt.StandardClaims{
+			ExpiresAt: at.Expires,
+			Issuer:    "Oauth Service",
+		},
+	}
+	idToken := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	idTokenString, err := idToken.SignedString(privateKey)
+	if err != nil {
+		return errors.NewInternalServerError("Error signing the token")
+	}
+	at.JWT = idTokenString
+	return nil
 }
 
-//Validate validates for empty access tokens
-// func (t *AccessToken) Validate() *errors.RestErr {
-// 	t.AccessToken = strings.TrimSpace(t.AccessToken)
-// 	if len(t.AccessToken) == 0 {
-// 		return errors.NewBadRequestError("Invalid access token in request")
-// 	}
-// 	if t.UserID <= 0 {
-// 		return errors.NewBadRequestError("Invalid User ID")
-// 	}
-// 	if t.ClientID <= 0 {
-// 		return errors.NewBadRequestError("Invalid Client ID")
-// 	}
-// 	if t.Expires <= 0 {
-// 		return errors.NewBadRequestError("Invalid Expiration time")
-// 	}
-// 	return nil
-// }
+//IsExpired checks if an access token is expired or not
+func (at *AccessToken) IsExpired() bool {
+	now := time.Now().UTC()
+	expirationTime := time.Unix(at.Expires, 0)
+	return expirationTime.Before(now)
+}
 
 //Validate validates the tokenrequest
 func (at *TokenRequest) Validate() *errors.RestErr {
@@ -93,6 +121,9 @@ func (at *TokenRequest) Validate() *errors.RestErr {
 	}
 	if at.Scope == "" {
 		return errors.NewBadRequestError("Scope mandatory")
+	}
+	if at.UserID == 0 {
+		return errors.NewBadRequestError("Send a Non Zero user id, and it is mandatory")
 	}
 	return nil
 }

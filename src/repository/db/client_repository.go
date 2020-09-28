@@ -1,8 +1,6 @@
 package db
 
 import (
-	"fmt"
-
 	"github.com/pt-abhishek/oAuth-api/src/clients/cassandra"
 	"github.com/pt-abhishek/oAuth-api/src/domain/client"
 	"github.com/pt-abhishek/oAuth-api/src/utils/errors"
@@ -39,7 +37,6 @@ func (r *clientRepo) Validate(c *client.Client) *errors.RestErr {
 		return errors.NewResourceNotFoundError("No such Client found")
 	}
 	if existingClient.ClientSecret != c.ClientSecret {
-		fmt.Printf("%s: %s", existingClient.ClientSecret, c.ClientSecret)
 		return errors.NewBadRequestError("Invalid Client")
 	}
 	return nil

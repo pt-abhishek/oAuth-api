@@ -1,6 +1,8 @@
 package db
 
 import (
+	"strings"
+
 	"github.com/gocql/gocql"
 	"github.com/pt-abhishek/oAuth-api/src/clients/cassandra"
 	"github.com/pt-abhishek/oAuth-api/src/domain/accesstoken"
@@ -53,6 +55,9 @@ func (db *dbRepository) Create(t *accesstoken.TokenRequest) (*accesstoken.Access
 	}
 	token := accesstoken.GetNewAccessToken(t)
 	//if token request contains the scope openID Connect then send JWT Too
+	if strings.Contains(t.Scope, "OPENIDCONNECT") {
+		token.AddJWTToken(t)
+	}
 
 	return token, nil
 }
