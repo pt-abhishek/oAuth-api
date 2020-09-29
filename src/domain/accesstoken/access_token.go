@@ -34,6 +34,7 @@ type AccessToken struct {
 	AccessToken string `json:"access_token"`
 	ClientID    string `json:"client_id"`
 	Expires     int64  `json:"expires"`
+	Scope       string `json:"scope"`
 	JWT         string `json:"bearer_token"`
 }
 
@@ -70,6 +71,7 @@ func GetNewAccessToken(t *TokenRequest) *AccessToken {
 		AccessToken: uuid.New().String(),
 		Expires:     time.Now().UTC().Add(expirationTime * time.Hour).Unix(),
 		ClientID:    t.ClientID,
+		Scope:       t.Scope,
 	}
 }
 

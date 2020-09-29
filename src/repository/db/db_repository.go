@@ -23,7 +23,7 @@ type dbRepository struct {
 
 var (
 	queryGetAccessToken    = "SELECT access_token, client_id, expires FROM access_tokens WHERE access_token=?"
-	queryCreateAccessToken = "INSERT INTO access_tokens(access_token, user_id, client_id, expires) VALUES (?,?,?,?)"
+	queryCreateAccessToken = "INSERT INTO access_tokens(access_token, client_id, expires) VALUES (?,?,?)"
 )
 
 //NewAT returns a new repository
@@ -54,6 +54,10 @@ func (db *dbRepository) Create(t *accesstoken.TokenRequest) (*accesstoken.Access
 		return nil, err
 	}
 	token := accesstoken.GetNewAccessToken(t)
+
+	if err := cassandra.GetSession().Query(queryCreateAccessToken, token.AccessToken, token.ClientID, token.Expires).Exec(); err != nil {
+		return nil, errors.NewInternalServerError("Unable To create AT , DB error")
+	}
 	//if token request contains the scope openID Connect then send JWT Too
 	if strings.Contains(t.Scope, "OPENIDCONNECT") {
 		token.AddJWTToken(t)
